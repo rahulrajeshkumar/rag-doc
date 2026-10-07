@@ -67,6 +67,10 @@ graph TD
    - Prevents retrieved candidate lists from containing redundant sentences from a single page.
 6. **Robust Multi-LLM & Synthesis Engine**:
    - Supports OpenAI, Ollama, and a zero-dependency local Extractive & Abstractive RAG engine with 100% citation enforcement (`[Document, Page N]`).
+7. **Evaluation Pipeline Bug Fixes**:
+   - Fixed double-retrieval bug where retrieval recall was measured against one set of chunks but the answer was generated from a different retrieval call.
+   - Replaced fragile string-contains citation check with a proper regex pattern (`\[.*?Page\s+\d+\]`).
+   - Added missing `rank-bm25` dependency to `requirements.txt`.
 
 ---
 
@@ -83,7 +87,8 @@ Rag_Pipeline/
 ├── docs/
 │   └── screenshots/           # High-resolution UI screenshots
 ├── data/
-│   └── documents/             # PDF research documents
+│   ├── documents/             # PDF research documents
+│   └── evaluation_qa.json     # 60 ground-truth Q&A pairs for evaluation (5 categories, 10 source docs)
 ├── vector_db/
 │   ├── index.faiss            # FAISS dense vector index
 │   ├── embeddings.npy         # Raw embedding matrix for MMR calculation
@@ -97,7 +102,7 @@ Rag_Pipeline/
     ├── vector_store.py        # FAISS + BM25 Hybrid store with RRF & MMR
     ├── llm_engine.py          # Multi-provider LLM interface (OpenAI, Ollama, Local Engine)
     ├── rag_pipeline.py        # End-to-end RAG orchestrator
-    └── evaluation.py          # Latency & citation precision benchmark suite
+    └── evaluation.py          # 6-metric RAG evaluation suite with per-category breakdown
 ```
 
 ---
@@ -119,7 +124,70 @@ python cli.py -q "What deep learning models or geospatial analytics frameworks a
 streamlit run app.py
 ```
 
-### 4. Run Benchmark & Evaluation Suite
+### 4. Run Evaluation Suite
 ```bash
 python src/evaluation.py
 ```
+
+**Evaluation CLI Options:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--qa-path` | Path to Q&A JSON file | `data/evaluation_qa.json` |
+| `--top-k` | Number of chunks to retrieve | `5` |
+| `--max-queries` | Limit number of queries (for quick tests) | All 60 |
+| `--output` | Save full JSON report to file | Print to stdout |
+| `--quiet` | Suppress per-query output | Off |
+
+```bash
+# Quick test with 5 questions
+python src/evaluation.py --max-queries 5
+
+# Full evaluation with JSON report
+python src/evaluation.py --output results.json
+```
+
+---
+
+## 📊 Evaluation Suite
+
+The pipeline includes a comprehensive evaluation framework with **60 ground-truth Q&A pairs** spanning 5 question categories across 10 source LULC research documents.
+
+### Metrics
+
+| # | Metric | Description |
+|---|--------|-------------|
+| 1 | **Retrieval Recall** | Did the retriever surface a chunk from the correct source document? |
+| 2 | **Answer Relevance (F1)** | Token-overlap F1 between generated answer and ground-truth answer |
+| 3 | **Citation Accuracy** | Does the answer cite the correct source document? |
+| 4 | **Citation Presence** | Does the answer contain any in-text citation (`[doc, Page N]`)? |
+| 5 | **Retrieval Latency** | Time (seconds) to retrieve top-k chunks |
+| 6 | **End-to-End Latency** | Time (seconds) for full query (retrieval + LLM generation) |
+
+### Evaluation Results (60 Questions, Top-K = 5)
+
+| Metric | Score |
+|--------|-------|
+| Retrieval Recall | **90.00%** |
+| Mean Answer Relevance (F1) | 0.1227 |
+| Median Answer Relevance (F1) | 0.1224 |
+| Citation Accuracy | **90.00%** |
+| Citation Presence Rate | **100.00%** |
+| Avg Retrieval Latency | 0.0373s |
+| Avg End-to-End Latency | 3.0967s |
+
+### Category Breakdown
+
+| Category | Count | Retrieval Recall | Answer Relevance | Citation Accuracy |
+|----------|-------|-----------------|------------------|-------------------|
+| Factual | 12 | 91.67% | 0.1338 | 91.67% |
+| Method | 19 | 89.47% | 0.1276 | 89.47% |
+| Results | 13 | 92.31% | 0.1160 | 92.31% |
+| Comparison | 8 | 87.50% | 0.0969 | 87.50% |
+| Dataset | 8 | 87.50% | 0.1311 | 87.50% |
+
+### Q&A Distribution
+
+- **60 questions** across **5 categories**: factual (12), method (19), results (13), comparison (8), dataset (8)
+- **10 source documents** covered with balanced distribution
+- Each question includes: question text, ground-truth answer, source document, and category label
+
