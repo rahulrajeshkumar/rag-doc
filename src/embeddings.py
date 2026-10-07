@@ -21,7 +21,7 @@ class EmbeddingManager:
                 print(f"[EmbeddingManager] Online model load failed ({net_err}). Retrying with local cache...")
                 self.model = SentenceTransformer(self.model_name, local_files_only=True)
 
-            print(f"[EmbeddingManager] Embedding model loaded successfully. Output dim: {self.model.get_embedding_dimension()}")
+            print(f"[EmbeddingManager] Embedding model loaded successfully. Output dim: {self.model.get_sentence_embedding_dimension()}")
         except Exception as e:
             raise RuntimeError(f"Failed to load sentence transformer model '{self.model_name}': {e}")
 
